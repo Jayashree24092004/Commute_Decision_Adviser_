@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commute Decision Advisor — OpenEnv</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
+  :root {
+    --bg: #0a0c10; --surface: #111318; --border: #1e2330;
+    --accent: #00e5ff; --accent2: #7c3aed; --warn: #f59e0b;
+    --danger: #ef4444; --success: #10b981; --text: #e2e8f0;
+    --muted: #64748b; --card: #13171f;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; overflow-x: hidden; }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px; opacity: 0.4; pointer-events: none; z-index: 0;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+  header { padding: 32px 0 24px; border-bottom: 1px solid var(--border); margin-bottom: 32px; }
+  .logo { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+  .logo-icon { width: 44px; height: 44px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  h1 { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.5px; }
+  .tagline { color: var(--muted); font-size: 0.9rem; font-family: 'DM Mono', monospace; }
+  .badge { display: inline-block; padding: 3px 10px; background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.25); border-radius: 20px; font-size: 0.72rem; color: var(--accent); font-family: 'DM Mono', monospace; margin-left: 12px; vertical-align: middle; }
+  .controls { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; align-items: center; }
+  select, button { font-family: 'DM Mono', monospace; font-size: 0.82rem; padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; transition: all 0.15s; }
+  select:hover, button:hover { border-color: var(--accent); }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), #0097a7); border-color: transparent; color: #000; font-weight: 600; }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-grade { background: linear-gradient(135deg, var(--accent2), #5b21b6); border-color: transparent; color: #fff; font-weight: 600; }
+  .btn-grade:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .status-bar { display: flex; gap: 16px; flex-wrap: wrap; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 24px; font-family: 'DM Mono', monospace; font-size: 0.78rem; }
+  .stat { display: flex; gap: 8px; align-items: center; }
+  .stat-label { color: var(--muted); }
+  .stat-val { color: var(--accent); font-weight: 500; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.active { background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .dot.done { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .server-status { font-family: 'DM Mono', monospace; font-size: 0.75rem; padding: 4px 12px; border-radius: 6px; margin-left: auto; }
+  .server-status.ok  { background: rgba(16,185,129,0.12); color: var(--success); border: 1px solid rgba(16,185,129,0.3); }
+  .server-status.err { background: rgba(239,68,68,0.10); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
+  .server-status.checking { background: rgba(245,158,11,0.10); color: var(--warn); border: 1px solid rgba(245,158,11,0.3); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media(max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; transition: border-color 0.2s; }
+  .card:hover { border-color: #2a3045; }
+  .card-title { font-size: 0.72rem; font-family: 'DM Mono', monospace; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .scenario-text { font-size: 0.9rem; line-height: 1.7; color: var(--text); background: rgba(255,255,255,0.02); border-left: 3px solid var(--accent); padding: 12px 16px; border-radius: 0 8px 8px 0; margin-bottom: 14px; }
+  .route-option { padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.15s; }
+  .route-option:hover { border-color: var(--accent); background: rgba(0,229,255,0.03); }
+  .route-option.selected { border-color: var(--accent); background: rgba(0,229,255,0.06); box-shadow: 0 0 0 1px var(--accent); }
+  .route-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .route-id { width: 28px; height: 28px; background: linear-gradient(135deg, var(--accent2), #4c1d95); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; flex-shrink: 0; }
+  .route-label { font-weight: 600; font-size: 0.9rem; }
+  .route-meta { display: flex; gap: 12px; flex-wrap: wrap; font-family: 'DM Mono', monospace; font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+  .route-meta .highlight { color: var(--accent); }
+  .route-path { font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--muted); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toll-badge { font-size: 0.68rem; padding: 2px 7px; border-radius: 4px; font-family: 'DM Mono', monospace; }
+  .toll-badge.yes { background: rgba(245,158,11,0.15); color: var(--warn); border: 1px solid rgba(245,158,11,0.3); }
+  .toll-badge.no  { background: rgba(16,185,129,0.12); color: var(--success); border: 1px solid rgba(16,185,129,0.25); }
+  .constraint-item { display: flex; align-items: flex-start; gap: 8px; font-size: 0.82rem; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; font-family: 'DM Mono', monospace; }
+  textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 0.78rem; padding: 12px; resize: vertical; min-height: 140px; transition: border-color 0.2s; line-height: 1.6; }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .reward-display { text-align: center; padding: 20px; }
+  .reward-number { font-size: 3.5rem; font-weight: 800; letter-spacing: -2px; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; display: block; line-height: 1; margin-bottom: 4px; }
+  .reward-label { color: var(--muted); font-size: 0.75rem; font-family: 'DM Mono', monospace; }
+  .score-bar-wrap { margin-bottom: 10px; }
+  .score-bar-header { display: flex; justify-content: space-between; font-size: 0.75rem; font-family: 'DM Mono', monospace; color: var(--muted); margin-bottom: 4px; }
+  .score-bar-track { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .score-bar-fill { height: 100%; border-radius: 3px; transition: width 0.8s cubic-bezier(.4,0,.2,1); background: linear-gradient(90deg, var(--accent2), var(--accent)); }
+  .violation-item { font-size: 0.78rem; font-family: 'DM Mono', monospace; color: var(--danger); padding: 6px 10px; background: rgba(239,68,68,0.07); border: 1px solid rgba(239,68,68,0.2); border-radius: 6px; margin-bottom: 6px; }
+  .empty-state { padding: 32px; text-align: center; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 0.82rem; }
+  .empty-state .big { font-size: 2rem; margin-bottom: 8px; }
+  .full-width { grid-column: 1 / -1; }
+  .prompt-block { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--muted); white-space: pre-wrap; max-height: 200px; overflow-y: auto; line-height: 1.6; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.68rem; font-family: 'DM Mono', monospace; font-weight: 600; }
+  .tag-easy   { background: rgba(16,185,129,0.12); color: var(--success); }
+  .tag-medium { background: rgba(245,158,11,0.12);  color: var(--warn); }
+  .tag-hard   { background: rgba(239,68,68,0.12);   color: var(--danger); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🗺️</div>
+      <div>
+        <h1>Commute Decision Advisor <span class="badge">OpenEnv v1.0</span></h1>
+        <div class="tagline">RL Environment · Meta × PyTorch × Scaler Hackathon</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="controls">
+    <select id="difficulty-select">
+      <option value="">Random Difficulty</option>
+      <option value="easy">Easy — Best Route Selection</option>
+      <option value="medium">Medium — Constraint Satisfaction</option>
+      <option value="hard">Hard — Multi-Stop Planning</option>
+    </select>
+    <button class="btn-primary" onclick="doReset()">⚡ New Episode</button>
+    <button class="btn-grade" id="grade-btn" disabled onclick="doStep()">▶ Submit & Grade</button>
+    <span class="server-status checking" id="server-status">⏳ Connecting...</span>
+  </div>
+
+  <div class="status-bar">
+    <div class="stat"><span class="dot" id="ep-dot"></span><span class="stat-label">Episode:</span><span class="stat-val" id="ep-id">—</span></div>
+    <div class="stat"><span class="stat-label">Task:</span><span class="stat-val" id="ep-task">—</span></div>
+    <div class="stat"><span class="stat-label">Difficulty:</span><span class="stat-val" id="ep-diff">—</span></div>
+    <div class="stat"><span class="stat-label">Status:</span><span class="stat-val" id="ep-status">Idle</span></div>
+    <div class="stat"><span class="stat-label">Last Reward:</span><span class="stat-val" id="ep-reward">—</span></div>
+  </div>
+
+  <div class="grid" id="main-grid">
+    <div class="card full-width">
+      <div class="empty-state">
+        <div class="big">🚦</div>
+        <div>Press <strong>New Episode</strong> to load a commute task.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════
+//  BACKEND URL — auto-detected, works everywhere:
+//  • localhost dev      → http://localhost:7860
+//  • VS Code Live Server → http://localhost:7860 (hardcoded)
+//  • Replit             → auto-detects Replit URL
+//  • HuggingFace Space  → auto-detects HF URL
+//  • Cursor / any IDE   → http://localhost:7860
+// ════════════════════════════════════════════════════════
+function getBackendURL() {
+  const host = window.location.hostname;
+  const port = window.location.port;
+  const protocol = window.location.protocol;
+
+  // Served directly by our FastAPI server (port 7860) → use same origin
+  if (port === '7860') {
+    return window.location.origin;
+  }
+
+  // Replit — hostname contains .replit.dev or .repl.co
+  if (host.includes('replit.dev') || host.includes('repl.co')) {
+    // Replit exposes one port publicly — use same origin, different port
+    return protocol + '//' + host.replace(/:\d+/, '') + ':7860';
+  }
+
+  // HuggingFace Spaces — hostname contains .hf.space
+  if (host.includes('hf.space')) {
+    return window.location.origin;
+  }
+
+  // Codespace / Cursor cloud — ends with .app or .dev with no port
+  if ((host.includes('.app') || host.includes('.dev') || host.includes('.io')) && !host.includes('localhost')) {
+    return window.location.origin;
+  }
+
+  // Default: localhost:7860 (works for Live Server, double-click, Cursor local, etc.)
+  return 'http://localhost:7860';
+}
+
+const BASE = getBackendURL();
+let currentObs = null;
+let selectedRoute = null;
+
+// ── Auto health check on load ──
+async function checkHealth() {
+  const el = document.getElementById('server-status');
+  try {
+    const r = await fetch(BASE + '/health', { method: 'GET' });
+    const data = await r.json();
+    if (data.status === 'ok') {
+      el.className = 'server-status ok';
+      el.textContent = '✅ Server connected';
+    } else throw new Error();
+  } catch {
+    el.className = 'server-status err';
+    el.textContent = '❌ Server offline — run: uvicorn server.main:app --port 7860';
+  }
+}
+checkHealth();
+
+async function doReset() {
+  const diff = document.getElementById('difficulty-select').value;
+  const body = diff ? JSON.stringify({ difficulty: diff }) : '{}';
+  setStatus('Loading...');
+  try {
+    const r = await fetch(BASE + '/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    currentObs = data.observation;
+    selectedRoute = null;
+    renderObservation(data);
+    document.getElementById('grade-btn').disabled = false;
+    document.getElementById('ep-dot').className = 'dot active';
+    document.getElementById('ep-id').textContent = data.episode_id;
+    document.getElementById('ep-task').textContent = data.task_id;
+    setDiffBadge(data.difficulty);
+    setStatus('Active');
+    document.getElementById('ep-reward').textContent = '—';
+  } catch(e) {
+    setStatus('Error');
+    alert('Cannot reach backend at: ' + BASE + '\n\nFix: Run this in your terminal:\nuvicorn server.main:app --host 0.0.0.0 --port 7860 --reload');
+  }
+}
+
+async function doStep() {
+  if (!currentObs) return;
+  const reasoning = document.getElementById('reasoning-input').value.trim();
+  if (!reasoning) { alert('Please enter your reasoning!'); return; }
+  const action = { reasoning, chosen_route: selectedRoute || undefined };
+  setStatus('Grading...');
+  document.getElementById('grade-btn').disabled = true;
+  try {
+    const r = await fetch(BASE + '/step', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(action)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    renderGrade(data);
+    document.getElementById('ep-dot').className = 'dot done';
+    setStatus('Completed');
+    document.getElementById('ep-reward').textContent = data.reward.toFixed(3);
+  } catch(e) {
+    setStatus('Error: ' + e.message);
+    document.getElementById('grade-btn').disabled = false;
+  }
+}
+
+function setStatus(s) { document.getElementById('ep-status').textContent = s; }
+
+function setDiffBadge(d) {
+  const el = document.getElementById('ep-diff');
+  const cls = { easy: 'tag-easy', medium: 'tag-medium', hard: 'tag-hard' }[d] || '';
+  el.innerHTML = `<span class="tag ${cls}">${d.toUpperCase()}</span>`;
+}
+
+function renderObservation(state) {
+  const obs = state.observation;
+  const grid = document.getElementById('main-grid');
+  grid.innerHTML = `
+    <div class="card">
+      <div class="card-title"><span>📋</span> Scenario</div>
+      <div class="scenario-text">${obs.scenario}</div>
+      <div style="font-size:0.78rem;color:var(--muted);font-family:'DM Mono',monospace;">
+        <strong style="color:var(--accent)">From:</strong> ${obs.start} &nbsp;→&nbsp;
+        <strong style="color:var(--accent)">To:</strong> ${obs.end} &nbsp;|&nbsp;
+        Depart: ${obs.depart_time} &nbsp;|&nbsp; Traffic: ${obs.time_slot}
+        ${obs.stops.length ? '<br><strong style="color:var(--warn)">Stops:</strong> ' + obs.stops.join(', ') : ''}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span>⚠️</span> Constraints (${obs.constraints.length})</div>
+      ${obs.constraints.length === 0
+        ? '<div style="color:var(--muted);font-size:0.82rem;font-family:\'DM Mono\',monospace">No constraints — choose the fastest route.</div>'
+        : obs.constraints.map(c => `
+          <div class="constraint-item">
+            <span>${iconForConstraint(c.type)}</span>
+            <span>${c.description}</span>
+          </div>`).join('')}
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span>🛣️</span> Route Options — click to select</div>
+      ${obs.route_options.map(r => `
+        <div class="route-option" id="route-${r.id}" onclick="selectRoute('${r.id}')">
+          <div class="route-header">
+            <div class="route-id">${r.id}</div>
+            <div class="route-label">${r.label}</div>
+            <span class="toll-badge ${r.has_toll ? 'yes' : 'no'}">${r.has_toll ? '💰 Toll' : '✅ Free'}</span>
+          </div>
+          <div class="route-meta">
+            <span class="highlight">⏱ ${r.total_time_min} min</span>
+            <span>📏 ${r.total_distance_km} km</span>
+            <span>🔀 ${r.hops} hops</span>
+            <span>${r.road_types_used.join(', ')}</span>
+          </div>
+          <div class="route-path">via ${r.via}</div>
+        </div>`).join('')}
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span>✍️</span> Your Reasoning</div>
+      <textarea id="reasoning-input" placeholder="Explain which route you choose and WHY.&#10;&#10;For medium/hard tasks:&#10;• State which constraints each route violates&#10;• Provide estimated arrival times&#10;• Confirm your chosen route satisfies ALL constraints"></textarea>
+      <div style="margin-top:10px;font-size:0.72rem;color:var(--muted);font-family:'DM Mono',monospace">
+        💡 Tip: Mention specific times, distances, and constraint violations for a higher score.
+      </div>
+    </div>
+
+    <div class="card full-width">
+      <div class="card-title"><span>🤖</span> LLM Task Prompt (copy this to your agent)</div>
+      <div class="prompt-block">${escHtml(obs.task_prompt)}</div>
+    </div>
+  `;
+}
+
+function selectRoute(id) {
+  selectedRoute = id;
+  document.querySelectorAll('.route-option').forEach(el => el.classList.remove('selected'));
+  const el = document.getElementById('route-' + id);
+  if (el) el.classList.add('selected');
+}
+
+function renderGrade(result) {
+  const breakdown = result.info.grade.breakdown;
+  const violations = result.info.grade.violations || [];
+  const grid = document.getElementById('main-grid');
+  const scoreEntries = Object.entries(breakdown).filter(([k]) => k.includes('score'));
+  const barHtml = scoreEntries.map(([k, v]) => `
+    <div class="score-bar-wrap">
+      <div class="score-bar-header"><span>${k.replace(/_/g,' ')}</span><span>${(v*100).toFixed(0)}%</span></div>
+      <div class="score-bar-track"><div class="score-bar-fill" style="width:${v*100}%"></div></div>
+    </div>`).join('');
+  const constDetails = breakdown.constraint_details || {};
+  const constHtml = Object.entries(constDetails).map(([k,v]) => `
+    <div class="constraint-item" style="color:${v ? 'var(--success)' : 'var(--danger)'}">
+      <span>${v ? '✅' : '❌'}</span> ${k.replace(/_/g,' ')}
+    </div>`).join('');
+  const violHtml = violations.length
+    ? violations.map(v => `<div class="violation-item">⚡ ${escHtml(v)}</div>`).join('')
+    : '<div style="color:var(--success);font-size:0.8rem;font-family:\'DM Mono\',monospace">✅ No violations detected</div>';
+  grid.innerHTML = `
+    <div class="card">
+      <div class="card-title"><span>🏆</span> Final Reward</div>
+      <div class="reward-display">
+        <span class="reward-number">${result.reward.toFixed(3)}</span>
+        <div class="reward-label">out of 1.000</div>
+      </div>
+      <div style="margin-top:12px">${barHtml}</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>🔍</span> Constraint Results</div>
+      ${constHtml || '<div style="color:var(--muted);font-size:0.82rem">No per-constraint breakdown.</div>'}
+      <div style="margin-top:14px">
+        <div class="card-title"><span>⚡</span> Violations</div>
+        ${violHtml}
+      </div>
+    </div>
+    <div class="card full-width">
+      <div class="card-title"><span>📊</span> Full Grade Report</div>
+      <div class="prompt-block">${escHtml(JSON.stringify(result.info.grade, null, 2))}</div>
+    </div>
+  `;
+}
+
+function iconForConstraint(type) {
+  const icons = { avoid_toll:'💰', avoid_road:'🚧', max_time:'⏱', arrive_before:'⏰', arrive_after:'🕐', poi_open:'🏪', avoid_node:'⛔' };
+  return icons[type] || '📌';
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+spec_version: 1
+name: commute-decision-advisor
+type: http
+runtime: docker
+app: server.main:app
+port: 7860
